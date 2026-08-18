@@ -4,3 +4,6 @@ Results/
 Extra/
 outputs/
 .venv/
+Data/
+forecasting_data.csv
+testrun_df.csv

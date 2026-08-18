@@ -53,6 +53,25 @@ def compute_actual_profit(dispatch_df, reference_price_df):
     return actual_df
 
 
+def build_signal_report(dispatch_df, predicted_price, reference_price_df):
+    """Full report of how the battery would actually be run off a forecast signal.
+
+    Columns: time (index), P_ch, P_dis, E, predicted_price, actual_price, profit.
+    ``dispatch_df`` is the schedule the optimizer chose for ``predicted_price``
+    (the "signal"); ``reference_price_df`` supplies the real Day-Ahead price
+    the schedule settles against, which is what ``profit`` is computed from.
+    """
+    report = dispatch_df[["P_ch", "P_dis", "E"]].copy()
+    report.index = reference_price_df.index
+    report.index.name = "time"
+    report["predicted_price"] = predicted_price.values
+    report["actual_price"] = reference_price_df["price"].values
+    report["profit"] = (
+        report["P_dis"] * report["actual_price"] - report["P_ch"] * report["actual_price"]
+    )
+    return report
+
+
 def correct_price_toward_actual_abs(forecasted_price, real_price, step=1.0):
     """Move the forecast up to `step` units closer to the actual price (never overshoot)."""
     diff = real_price - forecasted_price

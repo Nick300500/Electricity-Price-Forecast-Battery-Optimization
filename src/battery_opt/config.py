@@ -19,6 +19,7 @@ DEFAULT_STORAGE_PARAMS = {
 # Assumed turnkey system cost used for the payback-period estimate.
 BATTERY_SYSTEM_COST_EUR = 2930
 
+DATA_DIR = "Data"
 RESULTS_DIR = "Results"
 EXTRA_DIR = "Extra"
 OUTPUTS_DIR = "outputs"

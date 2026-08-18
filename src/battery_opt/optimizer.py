@@ -4,10 +4,18 @@ Given a price time series, solves for the profit-maximizing charge/discharge
 schedule of a battery with the given storage parameters.
 """
 
+import logging
+
 import pyomo.environ as pyo
 import pandas as pd
 
 from .config import DEFAULT_STORAGE_PARAMS
+
+# HiGHS logs its full solve trace (LP size, simplex iterations, ...) through
+# this logger at INFO level, which drowns out the pipeline's own progress
+# logging on every single dispatch call. It's a genuine solver diagnostic,
+# not noise from our code, so only raise the bar rather than disabling it.
+logging.getLogger("pyomo.contrib.appsi.solvers.highs").setLevel(logging.WARNING)
 
 
 def optimize_storage_dispatch(price_df, storage_params=None):
