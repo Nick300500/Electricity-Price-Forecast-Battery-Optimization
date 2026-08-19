@@ -11,7 +11,7 @@ import os
 
 import pandas as pd
 
-from . import backtest, data_loading, data_prep, modeling, smard_client
+from . import backtest, data_loading, data_prep, entsoe_client, modeling, smard_client
 from .config import DATA_DIR, DEFAULT_STORAGE_PARAMS, RESULTS_DIR, ensure_dirs
 from .optimizer import run_dispatch
 
@@ -27,6 +27,12 @@ def load_raw_data(data_dir=DATA_DIR):
     gen_forecast_2024 = data_loading.load_generation_forecast(smard_client.generation_forecast_path(data_dir, "2024"))
     gen_forecast_2025 = data_loading.load_generation_forecast(smard_client.generation_forecast_path(data_dir, "2025"))
     gen_forecast_23_24_df = pd.concat([gen_forecast_2023, gen_forecast_2024], ignore_index=True)
+
+    entsoe_client.ensure_load_forecast_data(data_dir)
+    load_forecast_2023 = data_loading.load_load_forecast(entsoe_client.load_forecast_path(data_dir, "2023"))
+    load_forecast_2024 = data_loading.load_load_forecast(entsoe_client.load_forecast_path(data_dir, "2024"))
+    load_forecast_2025 = data_loading.load_load_forecast(entsoe_client.load_forecast_path(data_dir, "2025"))
+    load_forecast_23_24_df = pd.concat([load_forecast_2023, load_forecast_2024], ignore_index=True)
 
     price_2024_df = data_loading.load_price_2024(os.path.join(data_dir, "price_data.csv"))
     price_2023_df = data_loading.load_price_2023(
@@ -77,6 +83,8 @@ def load_raw_data(data_dir=DATA_DIR):
         coal_price_hourly_25_df=coal_price_hourly_25_df,
         gen_forecast_23_24_df=gen_forecast_23_24_df,
         gen_forecast_25_df=gen_forecast_2025,
+        load_forecast_23_24_df=load_forecast_23_24_df,
+        load_forecast_25_df=load_forecast_2025,
     )
 
 

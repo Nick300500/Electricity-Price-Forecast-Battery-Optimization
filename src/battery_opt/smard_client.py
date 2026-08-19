@@ -51,14 +51,6 @@ FORECAST_GENERATION_FILTERS = {
     "total_forecast": 122,
 }
 
-# No day-ahead *load* forecast filter id ("Prognostizierter Stromverbrauch")
-# could be confirmed via the public API docs (bundesAPI/smard-api) — SMARD's
-# website lists the category, but its filter id isn't in that spec. To fill
-# this in: open SMARD's download center, select "Prognostizierter
-# Stromverbrauch", start a manual download, and read the id out of the
-# request URL in your browser's network tab (.../chart_data/<id>/DE/...).
-FORECAST_LOAD_FILTER = None
-
 
 def fetch_index(filter_id, region="DE", resolution="hour"):
     url = f"{BASE_URL}/{filter_id}/{region}/index_{resolution}.json"
@@ -134,11 +126,3 @@ def ensure_generation_forecast_data(data_dir, force=False):
         df = fetch_generation_forecast(start, end)
         df.to_csv(out_path, index=False)
         logger.info("Wrote %s (%d rows)", out_path, len(df))
-
-    if FORECAST_LOAD_FILTER is None:
-        logger.warning(
-            "No confirmed SMARD filter id for the day-ahead LOAD forecast "
-            "('Prognostizierter Stromverbrauch') — net_load stays on realized "
-            "values for now. See the comment on FORECAST_LOAD_FILTER for how "
-            "to fill it in."
-        )

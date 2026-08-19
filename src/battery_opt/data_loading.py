@@ -76,6 +76,15 @@ def load_generation_forecast(path):
     return df
 
 
+def load_load_forecast(path):
+    """Load a day-ahead total-load-forecast CSV (see entsoe_client.py). Already
+    hourly, already converted to naive German local time by entsoe_client, so
+    just needs its 'time' column parsed back into a real datetime."""
+    df = pd.read_csv(path)
+    df["time"] = pd.to_datetime(df["time"])
+    return df
+
+
 def load_load(path, delimiter=";"):
     return pd.read_csv(path, delimiter=delimiter)
 
