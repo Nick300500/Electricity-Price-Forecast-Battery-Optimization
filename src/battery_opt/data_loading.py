@@ -53,6 +53,15 @@ def load_generation(path, delimiter=","):
     return pd.read_csv(path, delimiter=delimiter)
 
 
+def load_generation_forecast(path):
+    """Load a SMARD day-ahead generation-forecast CSV (see smard_client.py /
+    scripts/fetch_forecast_data.py). Already-clean floats, unlike the manually
+    exported actuals CSVs — just needs its 'time' column parsed."""
+    df = pd.read_csv(path)
+    df["time"] = pd.to_datetime(df["time"])
+    return df
+
+
 def load_load(path, delimiter=";"):
     return pd.read_csv(path, delimiter=delimiter)
 

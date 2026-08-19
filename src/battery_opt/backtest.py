@@ -72,6 +72,18 @@ def build_signal_report(dispatch_df, predicted_price, reference_price_df):
     return report
 
 
+def cumulative_profit_by_day(report_df, profit_col="profit"):
+    """Running total of ``profit_col``, sampled at the end of each 24h period.
+
+    ``report_df`` needs a (roughly hourly) datetime index. Returns a single
+    'cumulative_profit' column indexed by day.
+    """
+    cumulative = report_df[profit_col].cumsum()
+    daily = cumulative.resample("24h").last()
+    daily.name = "cumulative_profit"
+    return daily.to_frame()
+
+
 def correct_price_toward_actual_abs(forecasted_price, real_price, step=1.0):
     """Move the forecast up to `step` units closer to the actual price (never overshoot)."""
     diff = real_price - forecasted_price

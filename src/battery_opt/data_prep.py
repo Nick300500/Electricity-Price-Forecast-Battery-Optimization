@@ -8,31 +8,37 @@ dataset as in the original notebook.
 
 import pandas as pd
 
+# net_load/res_load stay on realized ("Berechnete Auflösungen") values — no
+# confirmed day-ahead load-forecast source yet (see
+# smard_client.FORECAST_LOAD_FILTER). Generation is on forecasts (below).
 GEN_LOAD_COLUMNS_TO_CONVERT = [
     "net_load [MWh]",
     "res_load [MWh]",
-    "total_gen [MWh]",
-    "solar_gen [MWh]",
-    "wind_gen_off [MWh]",
-    "wind_gen_on [MWh]",
-    "other_gen [MWh]",
 ]
 
+# battery_opt.smard_client.FORECAST_GENERATION_FILTERS key -> feature column name.
+GENERATION_FORECAST_COLUMNS = {
+    "total_forecast": "total_gen [MWh]",
+    "solar_forecast": "solar_gen [MWh]",
+    "wind_offshore_forecast": "wind_gen_off [MWh]",
+    "wind_onshore_forecast": "wind_gen_on [MWh]",
+    "other_forecast": "other_gen [MWh]",
+}
 
-def add_engineered_columns(df, gen_df, load_df, gas_price_hourly_df, coal_price_hourly_df):
-    """Attach generation/load/gas/coal columns to a price DataFrame (in place-ish, returns df).
+
+def add_engineered_columns(df, gen_df, load_df, gas_price_hourly_df, coal_price_hourly_df, gen_forecast_df):
+    """Attach generation-forecast/load/gas/coal columns to a price DataFrame (in place-ish, returns df).
 
     Assumes ``gen_df``/``load_df``/``gas_price_hourly_df``/``coal_price_hourly_df`` are
     already aligned by row order with ``df`` (hourly, same start date).
+    ``gen_forecast_df`` (from data_loading.load_generation_forecast) is joined
+    on its own 'time' column instead, since it comes from a different source
+    (the SMARD API rather than a manually exported CSV) and isn't guaranteed
+    to be in the same row order.
     """
     df["time"] = gen_df["Datum von"]
     df["net_load [MWh]"] = load_df["Netzlast [MWh] Berechnete Auflösungen"]
     df["res_load [MWh]"] = load_df["Residuallast [MWh] Berechnete Auflösungen"]
-    df["total_gen [MWh]"] = gen_df["Gesamt [MWh] Berechnete Auflösungen"]
-    df["solar_gen [MWh]"] = gen_df["Photovoltaik [MWh] Berechnete Auflösungen"]
-    df["wind_gen_off [MWh]"] = gen_df["Wind Offshore [MWh] Berechnete Auflösungen"]
-    df["wind_gen_on [MWh]"] = gen_df["Wind Onshore [MWh] Berechnete Auflösungen"]
-    df["other_gen [MWh]"] = gen_df["Sonstige [MWh] Originalauflösungen"]
     df["gas_price [EUR/MWh]"] = gas_price_hourly_df["gas_price"]
     df["coal_price [EUR/t]"] = coal_price_hourly_df["hourly_coal_price"]
 
@@ -41,6 +47,11 @@ def add_engineered_columns(df, gen_df, load_df, gas_price_hourly_df, coal_price_
             df[col].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
         )
     df[GEN_LOAD_COLUMNS_TO_CONVERT] = df[GEN_LOAD_COLUMNS_TO_CONVERT].apply(pd.to_numeric, errors="coerce")
+
+    time_key = pd.to_datetime(df["time"], format="%d.%m.%Y %H:%M")
+    forecast_aligned = gen_forecast_df.set_index("time").reindex(time_key).reset_index(drop=True)
+    for source_col, feature_col in GENERATION_FORECAST_COLUMNS.items():
+        df[feature_col] = forecast_aligned[source_col].to_numpy()
 
     df["diff_load_gen [MWh]"] = df["total_gen [MWh]"] - df["net_load [MWh]"]
 
@@ -80,6 +91,8 @@ def build_feature_dataset(
     gas_price_hourly_25_df,
     coal_price_hourly_24_df,
     coal_price_hourly_25_df,
+    gen_forecast_23_24_df,
+    gen_forecast_25_df,
     start_date="2023-01-01",
     n_hours_train=17544,  # 2 years
     n_hours_test=4343,
@@ -112,10 +125,12 @@ def build_feature_dataset(
     load_df_2025_test = load_df_2025.drop(columns=["Datum bis"])
 
     forecasting_data = add_engineered_columns(
-        forecasting_data, gen_df, load_df, gas_price_hourly_23_24_df, coal_price_hourly_24_df
+        forecasting_data, gen_df, load_df, gas_price_hourly_23_24_df, coal_price_hourly_24_df,
+        gen_forecast_23_24_df,
     )
     testrun_df = add_engineered_columns(
-        testrun_df, gen_df_2025_test, load_df_2025_test, gas_price_hourly_25_df, coal_price_hourly_25_df
+        testrun_df, gen_df_2025_test, load_df_2025_test, gas_price_hourly_25_df, coal_price_hourly_25_df,
+        gen_forecast_25_df,
     )
 
     forecasting_data = add_calendar_columns(forecasting_data, start_date, n_hours_train)

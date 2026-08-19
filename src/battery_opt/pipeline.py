@@ -11,7 +11,7 @@ import os
 
 import pandas as pd
 
-from . import backtest, data_loading, data_prep, modeling
+from . import backtest, data_loading, data_prep, modeling, smard_client
 from .config import DATA_DIR, DEFAULT_STORAGE_PARAMS, RESULTS_DIR, ensure_dirs
 from .optimizer import run_dispatch
 
@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 def load_raw_data(data_dir=DATA_DIR):
     """Load and hourly-resample every raw source needed for the feature dataset."""
     logger.info("Loading raw data from %s", data_dir)
+
+    smard_client.ensure_generation_forecast_data(data_dir)
+    gen_forecast_2023 = data_loading.load_generation_forecast(smard_client.generation_forecast_path(data_dir, "2023"))
+    gen_forecast_2024 = data_loading.load_generation_forecast(smard_client.generation_forecast_path(data_dir, "2024"))
+    gen_forecast_2025 = data_loading.load_generation_forecast(smard_client.generation_forecast_path(data_dir, "2025"))
+    gen_forecast_23_24_df = pd.concat([gen_forecast_2023, gen_forecast_2024], ignore_index=True)
 
     price_2024_df = data_loading.load_price_2024(os.path.join(data_dir, "price_data.csv"))
     price_2023_df = data_loading.load_price_2023(
@@ -69,14 +75,17 @@ def load_raw_data(data_dir=DATA_DIR):
         gas_price_hourly_25_df=gas_price_hourly_25_df,
         coal_price_hourly_24_df=coal_price_hourly_24_df,
         coal_price_hourly_25_df=coal_price_hourly_25_df,
+        gen_forecast_23_24_df=gen_forecast_23_24_df,
+        gen_forecast_25_df=gen_forecast_2025,
     )
 
 
 def run(data_dir=DATA_DIR, results_dir=RESULTS_DIR, storage_params=None):
-    """Run the full pipeline and write `Results/battery_signal_report_2025.csv`.
+    """Run the full pipeline and write the Results/ output CSVs:
+    - battery_signal_report_2025.csv (time, P_ch, P_dis, E, predicted_price, actual_price, profit)
+    - battery_cumulative_profit_2025.csv (running profit total, sampled every 24h)
 
-    Returns the signal report DataFrame (time, P_ch, P_dis, E, predicted_price,
-    actual_price, profit).
+    Returns (signal_report, cumulative_profit) as DataFrames.
     """
     ensure_dirs()
     storage_params = storage_params or DEFAULT_STORAGE_PARAMS
@@ -90,7 +99,7 @@ def run(data_dir=DATA_DIR, results_dir=RESULTS_DIR, storage_params=None):
     features, target = modeling.prepare_features_target(forecasting_data)
     X_train, X_val, y_train, y_val = modeling.train_val_split(features, target)
     rf_model, _, y_pred_val, metrics = modeling.train_random_forest(
-        features, target, X_train, y_train, X_val, y_val
+        X_train, y_train, X_val, y_val
     )
     logger.info(
         "Validation MAE=%.2f EUR/MWh, RMSE=%.2f EUR/MWh", metrics["mae_val"], metrics["rmse_val"]
@@ -112,9 +121,14 @@ def run(data_dir=DATA_DIR, results_dir=RESULTS_DIR, storage_params=None):
     output_path = os.path.join(results_dir, "battery_signal_report_2025.csv")
     signal_report.to_csv(output_path)
 
+    cumulative_profit = backtest.cumulative_profit_by_day(signal_report)
+    cumulative_output_path = os.path.join(results_dir, "battery_cumulative_profit_2025.csv")
+    cumulative_profit.to_csv(cumulative_output_path)
+
     actual_generated_profit = signal_report["profit"].sum() / 1000
     logger.info("Theoretical (perfect-foresight) profit: %.2f EUR", theoretical_total_profit)
     logger.info("Actual (forecast-driven) profit: %.2f EUR", actual_generated_profit)
     logger.info("Wrote %s", output_path)
+    logger.info("Wrote %s", cumulative_output_path)
 
-    return signal_report
+    return signal_report, cumulative_profit

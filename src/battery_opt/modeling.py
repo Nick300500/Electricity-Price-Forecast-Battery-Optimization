@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
 
 from .config import RF_MODEL_PATH
 
@@ -28,16 +28,12 @@ def train_val_split(features, target, test_size=0.1, random_state=RANDOM_STATE):
     return train_test_split(features, target, test_size=test_size, random_state=random_state, shuffle=False)
 
 
-def train_random_forest(features, target, X_train, y_train, X_val, y_val, n_estimators=180, max_depth=10,
+def train_random_forest(X_train, y_train, X_val, y_val, n_estimators=180, max_depth=10,
                          random_state=RANDOM_STATE, model_path=RF_MODEL_PATH):
-    """Fit the RandomForestRegressor and report train/validation MAE & RMSE.
-
-    NOTE: fits on the full (features, target), not (X_train, y_train) — this
-    is the data-leakage bug flagged in the notebook review and is kept as-is
-    pending that fix.
-    """
+    """Fit the RandomForestRegressor on the training split only and report
+    train/validation MAE & RMSE (validation is a clean out-of-sample estimate)."""
     rf_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, random_state=random_state)
-    rf_model.fit(features, target)
+    rf_model.fit(X_train, y_train)
 
     y_pred_train = rf_model.predict(X_train)
     y_pred_val = rf_model.predict(X_val)
@@ -62,12 +58,12 @@ def load_random_forest(model_path=RF_MODEL_PATH):
 
 
 def tune_random_forest(X_train, y_train, X_val, y_val, n_estimators_range=range(100, 201, 10),
-                        max_depth_range=range(5, 11, 1), cv=3, random_state=RANDOM_STATE):
-    """Grid-search over n_estimators/max_depth using plain K-fold CV (cv=3).
+                        max_depth_range=range(5, 11, 1), n_splits=3, random_state=RANDOM_STATE):
+    """Grid-search over n_estimators/max_depth using TimeSeriesSplit CV.
 
-    NOTE: default KFold ignores chronological order for this time-indexed
-    target — flagged in the notebook review as a separate leakage risk, kept
-    as-is pending that fix (should become TimeSeriesSplit).
+    Plain K-fold would shuffle/split without respecting chronological order,
+    letting future rows help predict past ones within a fold. TimeSeriesSplit
+    only ever validates on data that comes after its training fold.
     """
     param_grid = {
         "n_estimators": list(n_estimators_range),
@@ -76,8 +72,9 @@ def tune_random_forest(X_train, y_train, X_val, y_val, n_estimators_range=range(
     grid_rf = GridSearchCV(
         RandomForestRegressor(random_state=random_state),
         param_grid,
-        cv=cv,
+        cv=TimeSeriesSplit(n_splits=n_splits),
         scoring="neg_mean_absolute_error",
+        n_jobs=-1,
     )
     grid_rf.fit(X_train, y_train)
 
