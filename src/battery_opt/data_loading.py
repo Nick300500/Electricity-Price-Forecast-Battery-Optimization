@@ -56,9 +56,23 @@ def load_generation(path, delimiter=","):
 def load_generation_forecast(path):
     """Load a SMARD day-ahead generation-forecast CSV (see smard_client.py /
     scripts/fetch_forecast_data.py). Already-clean floats, unlike the manually
-    exported actuals CSVs — just needs its 'time' column parsed."""
+    exported actuals CSVs — but its 'time' column decodes from SMARD's epoch-ms
+    timestamps as naive datetimes that are actually UTC instants, not German
+    local time like every other timestamp in this pipeline ("Datum von" in the
+    manually exported CSVs is local). Convert explicitly so joins against the
+    rest of the feature set line up correctly across DST changes (verified by
+    cross-checking SMARD's actual-generation series against the manually
+    exported actuals CSV for the same day: values match at a UTC+2 shift in
+    summer, not at zero offset)."""
     df = pd.read_csv(path)
-    df["time"] = pd.to_datetime(df["time"])
+    df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Berlin").dt.tz_localize(None)
+    # DST fall-back duplicates one local wall-clock hour (e.g. 2023-10-29 02:00
+    # occurs twice in UTC-derived data); keep the first to make 'time' unique
+    # for the reindex in add_engineered_columns. DST spring-forward's missing
+    # hour is left as-is -- it naturally becomes a NaN row on reindex, which
+    # the rest of this pipeline already tolerates (e.g. the lag-feature NaNs
+    # at the start of the series).
+    df = df.drop_duplicates(subset="time", keep="first")
     return df
 
 
